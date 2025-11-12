@@ -49,7 +49,8 @@ prompt = ChatPromptTemplate.from_template("""请根据下面提供的上下文�
 llm = ChatDeepSeek(
     model="deepseek-chat",
     temperature=0.7,
-    max_tokens=2048,
+    # max_tokens=2048,
+    max_tokens=4096,
     api_key=os.getenv("DEEPSEEK_API_KEY")
 )
 
@@ -57,7 +58,7 @@ llm = ChatDeepSeek(
 question = "文中举了哪些例子？"
 
 # 在向量存储中查询相关文档
-retrieved_docs = vectorstore.similarity_search(question, k=3)
+retrieved_docs = vectorstore.similarity_search(question, k=2)
 docs_content = "\n\n".join(doc.page_content for doc in retrieved_docs)
 
 answer = llm.invoke(prompt.format(question=question, context=docs_content))

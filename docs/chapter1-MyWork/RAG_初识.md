@@ -1,0 +1,213 @@
+# 初识RAG
+
+## 一. RAG 是什么？
+
+### 1.1 定义
+
+RAG（Retrieval-Augmented Generation）是一种融合信息检索与文本生成的技术范式。其核心逻辑是：在大型语言模型（LLM）生成文本前，先通过检索机制从外部知识库中动态获取相关信息，并将检索结果融入生成过程，从而提升输出的准确性和时效性。
+
+### 1.2 本质
+在LLM生成文本之前，先从外部知识库中检索相关信息，作为上下文辅助生成更准确的回答。
+
+## 二. RAG的应用场景
+
+### 2.1 解决LLM的核心局限 
+
+| 问题 | RAG的解决方案 |
+|---------------------|----------------------------------|
+| **静态知识局限** | 实时检索外部知识库，支持动态更新 |
+| **幻觉（Hallucination）** | 基于检索内容生成，错误率降低 |
+| **领域专业性不足** | 引入领域特定知识库（如医疗/法律） |
+| **数据隐私风险** | 本地化部署知识库，避免敏感数据泄露 |
+
+### 2.2 关键优势 
+
+1. **准确性提升**
+- 知识基础扩展：补充LLM预训练知识的不足，增强对专业领域的理解
+- 降低幻觉现象：通过提供具体参考材料，减少无中生有的情况
+- 可溯源引用：支持引用原始文档，提高输出内容的可信度和说服力
+
+2. **实时性保障**
+- 动态知识更新：知识库内容可以独立于模型进行实时更新和维护
+- 减少时滞性：规避LLM预训练数据截止日期带来的知识时效性问题
+
+3. **成本效益**
+- 避免频繁微调：相比反复微调LLM，维护知识库成本更低
+- 降低推理成本：针对特定领域问题，可使用更小的基础模型配合知识库
+- 资源消耗优化：减少存储完整知识在模型权重中的计算资源需求
+- 快速适应变化：新信息或政策更新只需更新知识库，无需重训练模型
+
+4. **可扩展性**
+- 多源集成：支持从不同来源和格式的数据中构建统一知识库
+- 模块化设计：检索组件可独立优化，不影响生成组件
+
+# 三. 快速上手RAG
+
+### 3.1 基础工具链选择
+
+**开发框架**
+- **LangChain**：提供预置RAG链（如rag_chain），支持快速集成LLM与向量库
+- **LlamaIndex**：专为知识库索引优化，简化文档分块与嵌入流程
+
+**向量数据库**
+
+- **Milvus**：开源高性能向量数据库
+- **FAISS**：轻量级向量搜索库
+- **Pinecone**：云服务向量数据库
+
+### 3.2 四步构建最小可行系统（MVP）
+
+1. **数据准备**
+   - 格式支持：PDF、Word、网页文本等
+   - 分块策略：按语义（如段落）或固定长度切分，避免信息碎片化
+
+2. **索引构建**
+   - 嵌入模型：选取开源模型（如text-embedding-ada-002）或微调领域专用模型
+   - 向量化：将文本分块转换为向量存入数据库
+
+3. **检索优化**
+   - 混合检索：结合关键词（BM25）与语义搜索（向量相似度）提升召回率
+   - 重排序（Rerank）：用小模型筛选Top-K相关片段（如Cohere Reranker）
+
+4. **生成集成**
+   - 提示工程：设计模板引导LLM融合检索内容
+   - LLM选型：GPT、Claude、Ollama等（按成本/性能权衡）
+
+
+# 最小可行系统(MVP)实战
+构建MVP步骤分为：
+1. 数据准备
+2. 索引构建
+3. 检索优化
+4. 生成集成
+
+下面将围绕这四个方面分别基于Langchain和LlamaIndex框架实现RAG应用。
+
+## 1. 代码编译环境与LLM账号准备
+   1. DeepSeek官网 API 申请需要付费，预充3元
+   2. Modelscope/硅基流动可免费申请模型
+2. 代码环境
+   1. 使用github codespaces 可成功跑通示例代码，但只有120h免费额度
+   2. 本地 win+3090 显卡环境已同步配置好环境，可以跑通代码，后续的课程将采用此方式
+
+## 2. 基于LangChain构建MVP
+### 3.1 初始化设置
+
+首先进行基础配置，包括导入必要的库、加载环境变量以及下载嵌入模型。
+
+```python
+import os
+# os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+from dotenv import load_dotenv
+from langchain_community.document_loaders import TextLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_core.vectorstores import InMemoryVectorStore
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_deepseek import ChatDeepSeek
+
+# 加载环境变量
+load_dotenv()
+```
+
+### 3.2 数据准备 (Data Preparation)
+
+- **加载原始文档**: 先定义Markdown文件的路径，然后使用`TextLoader`加载该文件作为知识源。
+    ```python
+    markdown_path = "../../data/C1/markdown/easy-rl-chapter1.md"
+    loader = TextLoader(markdown_path)
+    docs = loader.load()
+    ```
+- **文本分块 (Chunking)**: 为了便于后续的嵌入和检索，长文档被分割成较小的、可管理的文本块（chunks）。这里采用了递归字符分割策略，使用其默认参数进行分块。当不指定参数初始化 `RecursiveCharacterTextSplitter()` 时，其默认行为旨在最大程度保留文本的语义结构：
+    - **默认分隔符与语义保留**: 按顺序尝试使用一系列预设的分隔符 `["\n\n" (段落), "\n" (行), " " (空格), "" (字符)]` 来递归分割文本。这种策略的目的是尽可能保持段落、句子和单词的完整性，因为它们通常是语义上最相关的文本单元，直到文本块达到目标大小。
+    - **保留分隔符**: 默认情况下 (`keep_separator=True`)，分隔符本身会被保留在分割后的文本块中。
+    - **默认块大小与重叠**: 使用其基类 `TextSplitter` 中定义的默认参数 `chunk_size=4000`（块大小）和 `chunk_overlap=200`（块重叠）。这些参数确保文本块符合预定的大小限制，并通过重叠来减少上下文信息的丢失。
+    ```python
+    text_splitter = RecursiveCharacterTextSplitter()
+    texts = text_splitter.split_documents(docs)
+    ```
+
+### 3.3 索引构建 (Index Construction)
+
+数据准备完成后，接下来构建向量索引：
+
+- **初始化中文嵌入模型**: 使用`HuggingFaceEmbeddings`加载之前在初始化设置中下载的中文嵌入模型。配置模型在CPU上运行，并启用嵌入归一化 (`normalize_embeddings: True`)。
+    ```python
+    embeddings = HuggingFaceEmbeddings(
+        model_name="BAAI/bge-small-zh-v1.5",
+        model_kwargs={'device': 'cpu'},
+        encode_kwargs={'normalize_embeddings': True}
+    )
+    ```
+- **构建向量存储**: 将分割后的文本块 (`texts`) 通过初始化好的嵌入模型转换为向量表示，然后使用`InMemoryVectorStore`将这些向量及其对应的原始文本内容添加进去，从而在内存中构建出一个向量索引。
+    ```python
+    vectorstore = InMemoryVectorStore(embeddings)
+    vectorstore.add_documents(texts)
+    ```
+    这个过程完成后，便构建了一个可供查询的知识索引。
+
+### 3.4 查询与检索 (Query and Retrieval)
+
+索引构建完毕后，便可以针对用户问题进行查询与检索：
+
+- **定义用户查询**: 设置一个具体的用户问题字符串。
+    ```python
+    question = "文中举了哪些例子？"
+    ```
+- **在向量存储中查询相关文档**: 使用向量存储的`similarity_search`方法，根据用户问题在索引中查找最相关的 `k` (此处示例中 `k=3`) 个文本块。
+    ```python
+    retrieved_docs = vectorstore.similarity_search(question, k=3)
+    ```
+- **准备上下文**: 将检索到的多个文本块的页面内容 (`doc.page_content`) 合并成一个单一的字符串，并使用双换行符 (`"\n\n"`) 分隔各个块，形成最终的上下文信息 (`docs_content`) 供大语言模型参考。
+    ```python
+    docs_content = "\n\n".join(doc.page_content for doc in retrieved_docs)
+    ```
+    > 使用 `"\n\n"` (双换行符) 而不是 `"\n"` (单换行符) 来连接不同的检索文档块，主要是为了在传递给大型语言模型（LLM）时，能够更清晰地在语义上区分这些独立的文本片段。双换行符通常代表段落的结束和新段落的开始，这种格式有助于LLM将每个块视为一个独立的上下文来源，从而更好地理解和利用这些信息来生成回答。
+
+### 3.5 生成集成 (Generation Integration)
+
+最后一步是将检索到的上下文与用户问题结合，利用大语言模型（LLM）生成答案：
+
+- **构建提示词模板**: 使用`ChatPromptTemplate.from_template`创建一个结构化的提示模板。此模板指导LLM根据提供的上下文 (`context`) 回答用户的问题 (`question`)，并明确指出在信息不足时应如何回应。
+    ```python
+    prompt = ChatPromptTemplate.from_template("""请根据下面提供的上下文信息来回答问题。
+    请确保你的回答完全基于这些上下文。
+    如果上下文中没有足够的信息来回答问题，请直接告知：“抱歉，我无法根据提供的上下文找到相关信息来回答此问题。”
+    
+    上下文:
+    {context}
+    
+    问题: {question}
+    
+    回答:"""
+                                              )
+    ```
+- **配置大语言模型**: 初始化`ChatDeepSeek`客户端，配置所用模型 (`deepseek-chat`)、生成答案的温度参数 (`temperature=0.7`)、最大Token数 (`max_tokens=2048`) 以及API密钥 (从环境变量加载)。
+    ```python
+    llm = ChatDeepSeek(
+        model="deepseek-chat",
+        temperature=0.7,
+        max_tokens=2048,
+        api_key=os.getenv("DEEPSEEK_API_KEY")
+    )
+    ```
+- **调用LLM生成答案并输出**: 将用户问题 (`question`) 和先前准备好的上下文 (`docs_content`) 格式化到提示模板中，然后调用ChatDeepSeek的`invoke`方法获取生成的答案。
+    ```python
+    answer = llm.invoke(prompt.format(question=question, context=docs_content))
+    print(answer)
+    ```
+[完整代码](https://github.com/datawhalechina/all-in-rag/blob/main/code/C1/01_langchain_example.py)
+   
+## 2. 所遇问题
+1. 本地环境安装包失败
+   解决方案：重新在conda env中安装 requirements.txt，重试一次后成功安装完所有包
+
+2. Deepseek 账号调用失败
+   解决方案：注册API 后并未充值导致该问题，充值3元
+
+3. 直接运行示例代码，遇到模型无法获得对应结果的响应
+   解决方案：分析响应结果，可知总tokens 数量超过了2048，将模型的总tokens设置成4096，且修改索引最相关的k从3改成2，可正常获得响应，结果与教材中结果类似
+
+## 基于LlamaIndex构建MVP
+
+在RAG方面，LlamaIndex提供了更多封装好的API接口，这无疑降低了上手门槛，下面是一个简单实现：
