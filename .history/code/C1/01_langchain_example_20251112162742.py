@@ -20,8 +20,8 @@ docs = loader.load()
 
 # 文本分块
 text_splitter = RecursiveCharacterTextSplitter(
-    # chunk_size=8000,
-    # chunk_overlap=200,
+    chunk_size=400,
+    chunk_overlap=80,
 )
 chunks = text_splitter.split_documents(docs)
 

@@ -19,10 +19,7 @@ loader = UnstructuredMarkdownLoader(markdown_path)
 docs = loader.load()
 
 # 文本分块
-text_splitter = RecursiveCharacterTextSplitter(
-    # chunk_size=8000,
-    # chunk_overlap=200,
-)
+text_splitter = RecursiveCharacterTextSplitter()
 chunks = text_splitter.split_documents(docs)
 
 # 中文嵌入模型
