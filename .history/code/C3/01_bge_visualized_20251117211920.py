@@ -8,14 +8,14 @@ model = Visualized_BGE(
 model.eval()
 
 with torch.no_grad():
-    text_emb = model.encode(text="datawhale开源组织的logo")
+    text_emb = model.encode(text="红房子里面住着可爱的猫")
     img_emb_1 = model.encode(image="../../data/C3/imgs/datawhale01.png")
     multi_emb_1 = model.encode(
-        image="../../data/C3/imgs/datawhale01.png", text="datawhale开源组织的logo"
+        image="../../data/C3/imgs/datawhale01.png", text="红房子里面住着可爱的猫"
     )
     img_emb_2 = model.encode(image="../../data/C3/imgs/datawhale02.png")
     multi_emb_2 = model.encode(
-        image="../../data/C3/imgs/datawhale02.png", text="datawhale开源组织的logo"
+        image="../../data/C3/imgs/datawhale02.png", text="红房子里面住着可爱的猫"
     )
 
 # 计算相似度
